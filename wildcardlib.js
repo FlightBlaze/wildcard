@@ -316,6 +316,7 @@ function evaluate(instructions, globalStore, _startLevel = 0, initialOperands = 
   let functionStack = [];
   let variableStack = [[]];
   let operandPopCountStack = [0];
+  let variableInfoStack = [[]];
   let lineNumber = 1;
   let filename = '';
 
@@ -394,6 +395,7 @@ function evaluate(instructions, globalStore, _startLevel = 0, initialOperands = 
   const pushFunction = () => {
     functionStack.push(operandStack.pop());
     variableStack.push([]);
+    variableInfoStack.push([]);
     decrementOperandPopCount();
     operandPopCountStack.push(0);
   }
@@ -415,12 +417,14 @@ function evaluate(instructions, globalStore, _startLevel = 0, initialOperands = 
     } else if (typeof funcBody === 'function') {
       popAllOperandsInCurrentScope();
       funcBody({
-        operandStack, functionStack, variableStack, pushOperand, popOperandAndRead, readOperand, globalStore, operands,
+        operandStack, functionStack, variableStack, variableInfoStack, pushOperand, popOperandAndRead, readOperand, globalStore, operands,
         incrementOperandPopCount, decrementOperandPopCount, lineNumber, getVariable, pushFunction, callFunction, error
       });
     }
-    for (const varName of variableStack.pop()) {
-      delete globalStore[varName];
+    const varInfo = variableInfoStack.pop();
+    const varNames = variableStack.pop();
+    for (let i = 0; i < varInfo.length; i++) {
+      globalStore[varNames[i]] = varInfo[i].previousValue;
     }
   }
 
@@ -488,6 +492,7 @@ function evaluate(instructions, globalStore, _startLevel = 0, initialOperands = 
       const b = popOperandAndRead();
       const a = unquoteString(operandStack.pop());
       decrementOperandPopCount();
+      variableInfoStack[variableInfoStack.length - 1].push({previousValue: globalStore[a]});
       globalStore[a] = { value: b, level: functionStack.length + 1 };
       variableStack[variableStack.length - 1].push(a);
     }
