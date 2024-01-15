@@ -1,0 +1,1 @@
+print(addTwo(12))

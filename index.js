@@ -1,4 +1,50 @@
 const wlib = require('./wildcardlib');
+const fs = require('fs');
+
+function bundle(path, outFilename) {
+  const functions = [];
+  let entryPointContents = '';
+  let hasIndexFile = false;
+  fs.readdirSync(path).forEach(file => {
+    if (!file.endsWith('.w')) {
+      return;
+    }
+    console.log(file);
+    if (file === 'index.w') {
+      entryPointContents = fs.readFileSync(path + '/' + file, 'utf8');
+      hasIndexFile = true;
+    } else {
+      const fnName = file.replace('.w', '');
+      functions.push({name: fnName, body: '__filename_'+fnName+'\n'+fs.readFileSync(path + '/' + file, 'utf8')});
+    }
+  });
+  if (!hasIndexFile) {
+    console.error('Bundle Error: No index.w file found');
+    process.exit(1);
+  }
+  entryPointContents = functions.map(f => `${f.name}=[${f.body}]\n`).join('') + '__filename_index\n' + entryPointContents;
+  console.log(entryPointContents);
+  fs.writeFileSync('./'+outFilename+'.appw', wlib.compile(entryPointContents).map(ins => encodeURIComponent(ins)).join('\n'));
+}
+
+function evaluate(instructions) {
+  try {
+    wlib.evaluate(instructions, wlib.globalStore);
+  } catch (e) {
+    if (e.message !== 'syntax' && e.message !== 'runtime') {
+      throw e;
+    }
+  }
+}
+
+function runBundledCode(path) {
+  const instructions = fs.readFileSync(path, 'utf8').split('\n').map(ins => decodeURIComponent(ins));
+  evaluate(instructions);
+}
+
+function runCode(code) {
+  evaluate(wlib.compile(code));
+}
 
 const color = {
   reset: "\x1b[0m",
@@ -73,13 +119,29 @@ if (process.argv[2] === 'eval') {
     expression = expression.slice(1, -1);
   }
   expression = `print(${expression})`;
+  runCode(expression);
+  return;
+}
+
+if (process.argv[2] ==='build') {
+  checkArgumentCount('serve', 3, process.argv.length);
+  const path = process.argv[4];
+  const filename = process.argv[3];
+  console.log(`Building ${path}...`);
   try {
-    wlib.evaluate(wlib.compile(expression), wlib.globalStore);
+    bundle(path, filename);
+    console.log(`Saved to ${filename}.appw`);
   } catch (e) {
-    if (!e.message === 'syntax' && !e.message === 'runtime') {
+    if (e.message !== 'syntax') {
       throw e;
     }
   }
+  return;
+}
+
+if (process.argv[2] === 'run') {
+  const path = process.argv[3];
+  runBundledCode(path);
   return;
 }
 

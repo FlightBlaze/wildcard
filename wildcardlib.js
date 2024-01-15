@@ -18,11 +18,13 @@ function infixToPostfix(infixExpression) {
   const output = [];
   let operatorBefore = true;
   let parenthesisBefore = false;
+  let operatorDeclaredBefore = false;
   let callsBefore = 0;
   let lineNumber = 1;
+  let filename = '';
 
   const error = (message) => {
-    console.error('Syntax Error: '+message+' at line '+lineNumber);
+    console.error('Syntax Error: '+message+' at line '+lineNumber+' in file '+filename+'.w');
     throw new Error('syntax');
   }
 
@@ -36,14 +38,14 @@ function infixToPostfix(infixExpression) {
     }
 
     if (operators[operator]) {
-      if (operatorBefore && !parenthesisBefore && operator !== '-') {
+      if ((operatorDeclaredBefore !== operatorBefore) && !parenthesisBefore && operator !== '-') {
         error('Doubled operator');
       }
 
       while (stack.length && operators[stack[stack.length - 1]] > operators[operator]) {
         output.push(stack.pop() + ' ');
       }
-      if (operatorBefore && operator === '-') {
+      if ((operatorDeclaredBefore === operatorBefore) && operator === '-') {
         stack.push('__minus');
       } else {
         stack.push(operator);
@@ -57,6 +59,25 @@ function infixToPostfix(infixExpression) {
 
   for (let i = 0; i < infixExpression.length; i++) {
     const char = infixExpression[i];
+
+    if (char === '_' && infixExpression[i+1] === '_') {
+      let magicOpChars = [];
+      let j = i;
+      for (; j < infixExpression.length; j++) {
+        if (infixExpression[j] === '\n' || infixExpression[j] === ' ') {
+          break;
+        }
+        magicOpChars.push(infixExpression[j]);
+      }
+      const magicOp = magicOpChars.join('');
+      if (magicOp.startsWith('__filename_')) {
+        filename = magicOp.slice('__filename_'.length);
+        lineNumber = 0;
+        output.push(magicOp+' ');
+        i = j;
+        continue;
+      }
+    }
 
     if (char === ' ' || char === '\n' || char === '\r' || char === '\t') {
       output.push(' ');
@@ -77,6 +98,7 @@ function infixToPostfix(infixExpression) {
       addOperator();
       output.push(char);
       operatorBefore = false;
+      operatorDeclaredBefore = false;
     } else if (char === '(') {
       if(!operatorBefore && i !== 0) {
         output.push(' __pushfunc ');
@@ -107,7 +129,7 @@ function infixToPostfix(infixExpression) {
     } else {
       operatorChars.push(char);
       output.push(' ');
-      operatorBefore = true;
+      operatorDeclaredBefore = true;
     }
     if (char !== '(') {
       parenthesisBefore = false;
@@ -131,9 +153,10 @@ function extractData(expression) {
   let insideComment = false;
   let scanningNumber = false;
   let parenthesisWasBefore = false;
+  let filename = '';
 
   const error = (message) => {
-    console.error('Syntax Error: '+message);
+    console.error('Syntax Error: '+message+' in file '+filename+'.w');
     throw new Error('syntax');
   }
 
@@ -159,6 +182,24 @@ function extractData(expression) {
     if (char === '?' && nextChar === '/') {
       insideComment = false;
       continue;
+    }
+    if (char === '_' && nextChar === '_' && !insideString) {
+      let magicOpChars = [];
+      let j = i;
+      for (; j < expression.length; j++) {
+        if (expression[j] === '\n' || expression[j] === ' ') {
+          break;
+        }
+        magicOpChars.push(expression[j]);
+      }
+      const magicOp = magicOpChars.join('');
+      if (magicOp.startsWith('__filename_')) {
+        filename = magicOp.slice('__filename_'.length);
+        lineNumber = 0;
+        output.push(magicOp+' ');
+        i = j;
+        continue;
+      }
     }
     if (insideComment) {
       if (char === '\n') {
@@ -193,7 +234,7 @@ function extractData(expression) {
         data[data.length - 1].push(char);
       }
       else {
-        if (!isNaN(char) && char!== ' ' && char !== '\n') {
+        if (!isNaN(char) && char !== ' ' && char !== '\n') {
           if (!scanningNumber) {
             scanningNumber = true;
             data.push([]);
@@ -258,6 +299,7 @@ function evaluate(instructions, globalStore, _startLevel = 0, initialOperands = 
   let variableStack = [[]];
   let operandPopCountStack = [0];
   let lineNumber = 1;
+  let filename = '';
 
   const popAllOperandsInCurrentScope = () => {
     const count = operandPopCountStack.pop();
@@ -327,7 +369,7 @@ function evaluate(instructions, globalStore, _startLevel = 0, initialOperands = 
   }
 
   const error = (message, info = '') => {
-    console.error('Runtime Error: '+message+' at line '+lineNumber + (info.length ? ' ' + info : ''));
+    console.error('Runtime Error: '+message+' at line '+lineNumber+' in file '+ filename+'.w' + (info.length ? ' ' + info : ''));
     throw new Error('runtime');
   }
 
@@ -351,7 +393,7 @@ function evaluate(instructions, globalStore, _startLevel = 0, initialOperands = 
     }
     if (typeof funcBody === 'string' && funcBody.startsWith('[')) {
       popAllOperandsInCurrentScope();
-      pushOperand(evaluate(compile(funcBody.slice(1, funcBody.length - 1)), globalStore, currentNestingLevel, operands.map(packOperand)));
+      pushOperand(evaluate(compile(funcBody.slice(1, funcBody.length - 1)), globalStore, currentNestingLevel, operands.map((op) => packOperand(readOperand(op)))));
     } else if (typeof funcBody === 'function') {
       popAllOperandsInCurrentScope();
       funcBody({
@@ -374,6 +416,10 @@ function evaluate(instructions, globalStore, _startLevel = 0, initialOperands = 
     }
     else if (instruction === '__newline') {
       lineNumber++;
+    }
+    else if (instruction.startsWith('__filename')) {
+      filename = instruction.replace('__filename', '');
+      lineNumber = 0;
     }
     // else if (instruction.startsWith('__data_')) {
     //   stack[stack.length - 1].push(data[parseInt(instruction.replace('__data_', ''))]);
