@@ -1,0 +1,25 @@
+{
+  "name": "wildcard",
+  "version": "1.0.0",
+  "description": "The functional programming language",
+  "main": "index.js",
+  "scripts": {
+    "w": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FlightBlaze/wildcard.git"
+  },
+  "keywords": [
+    "functional",
+    "interpreter",
+    "vm",
+    "programming_language"
+  ],
+  "author": "Kozichev Dmitry",
+  "license": "Unlicense",
+  "bugs": {
+    "url": "https://github.com/FlightBlaze/wildcard/issues"
+  },
+  "homepage": "https://github.com/FlightBlaze/wildcard#readme"
+}
