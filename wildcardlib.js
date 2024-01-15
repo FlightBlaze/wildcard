@@ -3,9 +3,12 @@ function infixToPostfix(infixExpression) {
     '.': 4,
     '+': 2,
     '-': 2,
+    '%': 3,
     '*': 3,
     '/': 3,
     '==': 4.5,
+    '&': 4.3,
+    '|': 4.4,
     '=': 7,
     ' ': 1,
     '\n': 1.5,
@@ -38,7 +41,7 @@ function infixToPostfix(infixExpression) {
     }
 
     if (operators[operator]) {
-      if ((operatorDeclaredBefore !== operatorBefore) && !parenthesisBefore && operator !== '-') {
+      if ((operatorDeclaredBefore !== operatorBefore) && operatorBefore && !parenthesisBefore && operator !== '-') {
         error('Doubled operator');
       }
 
@@ -154,6 +157,7 @@ function extractData(expression) {
   let scanningNumber = false;
   let parenthesisWasBefore = false;
   let filename = '';
+  let functionNestingLevel = 0;
 
   const error = (message) => {
     console.error('Syntax Error: '+message+' in file '+filename+'.w');
@@ -213,21 +217,35 @@ function extractData(expression) {
       parenthesisWasBefore = false;
     }
     if (char === "'" || char === '[' || char === ']') {
+      const wasInsideFunction = insideFunction;
       if (!insideFunction || char !== "'") {
         insideString = !insideString;
       }
       if (char === '[') {
+        functionNestingLevel++;
         insideFunction = true;
+        insideString = true;
       } else if (char === ']') {
-        insideFunction = false;
+        functionNestingLevel--;
+        if (functionNestingLevel === 0) {
+          insideFunction = false;
+          insideString = false;
+        } else {
+          insideFunction = true;
+          insideString = true;
+        }
       }
-      if (insideString && (!insideFunction || char === '[')) {
+      if (insideString && !wasInsideFunction && char === '[') {
         data.push([char]);
       } else if (insideFunction && char === "'") {
         data[data.length - 1].push(char);
-      } else {
+      } else if ((wasInsideFunction || (!insideString && char === "'")) && functionNestingLevel === 0) {
         data[data.length - 1] = data[data.length - 1].concat([char]).join('');
         output.push('__data_' + (data.length - 1));
+      } else if (insideString && char === "'") {
+        data.push([char]);
+      } else {
+        data[data.length - 1].push(char);
       }
     } else {
       if (insideString) {
@@ -425,7 +443,8 @@ function evaluate(instructions, globalStore, _startLevel = 0, initialOperands = 
     //   stack[stack.length - 1].push(data[parseInt(instruction.replace('__data_', ''))]);
     // }
     else if (instruction === '+' || instruction === '-' || instruction === '*'
-      || instruction === '/' || instruction === '==' || instruction === '?' || instruction === ':') {
+      || instruction === '/' || instruction === '==' || instruction === '?' || instruction === ':' ||
+      instruction == '&' || instruction === '|') {
       const b = popOperandAndRead();
       const a = popOperandAndRead();
       switch(instruction) {
@@ -449,6 +468,15 @@ function evaluate(instructions, globalStore, _startLevel = 0, initialOperands = 
           break;
         case ':':
           pushOperand(a? a : b);
+          break;
+        case '&':
+          pushOperand(a && b);
+          break;
+        case '|':
+          pushOperand(a || b);
+          break;
+        case '%':
+          pushOperand(a % b);
           break;
       }
     }
@@ -641,8 +669,20 @@ const globalStore = buildGlobalStore({
     } else {
       state.pushOperand('unknown');
     }
+  },
+  len: (state) => {
+    if (state.operands.length > 1) {
+      state.error('Len requires exactly 1 argument');
+    }
+    const operand = state.operands.length === 0
+      ? state.operandStack[state.operandStack.length - 1]
+      : state.readOperand(state.operands[0]);
+    if (typeof operand !== 'object') {
+      state.error('Len only works with a complex');
+    }
+    state.pushOperand(operand.arr.length);
   }
-});
+}); 
 
 exports.globalStore = globalStore;
 exports.buildGlobalStore = buildGlobalStore;

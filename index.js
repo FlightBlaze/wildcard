@@ -1,7 +1,7 @@
 const wlib = require('./wildcardlib');
 const fs = require('fs');
 
-function bundle(path, outFilename) {
+function bundle(path, verbose=true) {
   const functions = [];
   let entryPointContents = '';
   let hasIndexFile = false;
@@ -9,7 +9,9 @@ function bundle(path, outFilename) {
     if (!file.endsWith('.w')) {
       return;
     }
-    console.log(file);
+    if (verbose) {
+      console.log(file);
+    }
     if (file === 'index.w') {
       entryPointContents = fs.readFileSync(path + '/' + file, 'utf8');
       hasIndexFile = true;
@@ -23,8 +25,11 @@ function bundle(path, outFilename) {
     process.exit(1);
   }
   entryPointContents = functions.map(f => `${f.name}=[${f.body}]\n`).join('') + '__filename_index\n' + entryPointContents;
-  console.log(entryPointContents);
-  fs.writeFileSync('./'+outFilename+'.appw', wlib.compile(entryPointContents).map(ins => encodeURIComponent(ins)).join('\n'));
+  return wlib.compile(entryPointContents);
+}
+
+function bundleAndSave(path, outFilename) {
+  fs.writeFileSync('./'+outFilename+'.appw', bundle(path).map(ins => encodeURIComponent(ins)).join('\n'));
 }
 
 function evaluate(instructions) {
@@ -43,7 +48,14 @@ function runBundledCode(path) {
 }
 
 function runCode(code) {
-  evaluate(wlib.compile(code));
+  try {  
+    const instructions = wlib.compile(code);
+    evaluate(instructions);
+  } catch (e) {
+    if (e.message !== 'syntax') {
+      throw e;
+    }
+  }
 }
 
 const color = {
@@ -86,7 +98,7 @@ if (process.argv.length === 2) {
     '',
     `${color.fg.blue}Possible commands${color.reset}`,
     '',
-    ` • wildcard serve ${color.fg.green}./path/to/sources${color.reset}          ${color.fg.gray}— start the language server and run the application${color.reset}`,
+    ` • wildcard watch ${color.fg.green}./path/to/sources${color.reset}          ${color.fg.gray}— start the language server and run the application${color.reset}`,
     ` • wildcard build debug ${color.fg.green}./path/to/sources${color.reset}    ${color.fg.gray}— compile the application in debug mode${color.reset}`,
     ` • wildcard build release ${color.fg.green}./path/to/sources${color.reset}  ${color.fg.gray}— compile the application for production${color.reset}`,
     ` • wildcard run ${color.fg.green}./path/to/application${color.reset}        ${color.fg.gray}— run the application${color.reset}`,
@@ -106,10 +118,22 @@ const checkArgumentCount = (funcName, argCount, actualArgumentCount) => {
   process.exit(1);
 }
 
-if (process.argv[2] ==='serve') {
-  checkArgumentCount('serve', 2, process.argv.length);
-  const path = process.argv[2];
-  console.log(`Serving from ${path}`);
+if (process.argv[2] ==='watch') {
+  checkArgumentCount('watch', 2, process.argv.length);
+  const path = process.argv[3];
+  console.log(`Watching the ${path}`);
+  const run = () => {
+    // try {
+      evaluate(bundle(path, false));
+    // } catch (e) {}
+  }
+  run();
+  fs.watch(path, function (event, filename) {
+    if (filename) {
+      console.log('File changed: ' + filename+'\n');
+    }
+    run();
+  });
   return;
 }
 
@@ -129,7 +153,7 @@ if (process.argv[2] ==='build') {
   const filename = process.argv[3];
   console.log(`Building ${path}...`);
   try {
-    bundle(path, filename);
+    bundleAndSave(path, filename);
     console.log(`Saved to ${filename}.appw`);
   } catch (e) {
     if (e.message !== 'syntax') {
