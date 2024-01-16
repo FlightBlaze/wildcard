@@ -23,7 +23,7 @@ Fibonacci number is 21
 ```
 
 ## When complex makes things easy
-Introducing `complex` — a straighforward way to organize your data structures. It acts as an `array`, a `hashmap`, and like something in-between. You can use familiar functions like `map` and `reduce` on the `complex`
+Introducing `complex` — a straightforward way to organize your data structures. It acts as an `array`, a `hashmap`, and like something in-between. You can use familiar functions like `map` and `reduce` on a `complex`
 ```
 fib = complex(about='This is Fibonacci sequence' 0 1 1 2 3 5 8 13 21)
 print(fib.about)
